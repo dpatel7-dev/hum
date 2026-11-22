@@ -11,8 +11,10 @@
 you're doing without taking it over, and a bee in the menu bar opens and closes it. Your own music
 files, songs from YouTube, playlists, a queue, shuffle, a sleep timer and an equalizer.
 
-Bumble the bumblebee flies along the bar as the song plays, and the garden at the bottom sways to
-the music.
+Bumble the bumblebee flies along the bar as the song plays, and the flowers in the garden at the
+bottom dance to your music: they rock on the beat, bob, hop and open their petals, sparkle on the
+high notes, doze off when the music stops, and take a bow at the end of a song. Press **M** and hum
+becomes a little player tucked in the corner of the screen.
 
 ## Get it
 
@@ -39,6 +41,7 @@ Then, once: `hum on`. From then on there's a bee in your menu bar (top right of 
 | Fall asleep to it | *Sleep*: stop in 15, 30, 45 or 60 minutes, or at the end of the song |
 | Bass, middle, treble | *EQ* (for your own music files) |
 | From Terminal | `hum` shows what's playing with keys to control it; `hum play homework` plays a playlist or a song; `hum pause`, `hum next`, `hum now` |
+| Make it small | Press **M** (or the arrows button at the top). hum shrinks to a little player in the bottom right corner: the song, play/pause/next, Bumble's bar and the garden. **M** again (or the arrows) makes it big. Or `hum small` and `hum big` |
 | A bigger window | `hum app` |
 | Something doesn't work | `hum doctor` |
 

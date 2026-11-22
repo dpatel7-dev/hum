@@ -13,11 +13,23 @@ const panel = require('./panel')({
   icon: { grid: Bee.MINI, ink: Bee.INK_NIGHT },
 });
 
+// The two sizes: the full panel at the side of the screen, and small, tucked in
+// the bottom right corner. Small grows while a YouTube song plays, because
+// YouTube's rules say its player must be at least 200 × 200 pixels.
+const FULL = { width: 380, height: 680, where: 'side' };
+function sizeFor({ mini = false, video = false, height = 0 } = {}) {
+  if (!mini) return { ...FULL };
+  const h = Math.round(Number(height) || 0);
+  return { width: video ? 372 : 340, height: Math.max(video ? 330 : 96, Math.min(560, h || (video ? 344 : 132))), where: 'corner' };
+}
+
 function setUp(version, combo = '^~m') {
   const icon = path.join(__dirname, '..', 'assets', 'hum.icns');
   Mac.makeApp({ name: 'hum', id: 'dev.dpatel7.hum.app', args: ['panel'], icon, script: SCRIPT, version });
   const r = Mac.startAgent({ args: ['serve'], script: SCRIPT });
-  const p = panel.setUp({ combo });
+  let mini = false;
+  try { mini = !!require('./library').load().settings.mini; } catch { /* a new library */ }
+  const p = panel.setUp({ combo, size: sizeFor({ mini }) });
   return { ...r, panel: p };
 }
 
@@ -27,7 +39,7 @@ function tearDown() {
   Mac.removeApp('hum');
 }
 
-module.exports = { ...Mac, panel, setUp, tearDown, SCRIPT };
+module.exports = { ...Mac, panel, setUp, tearDown, sizeFor, SCRIPT };
 
 /**
  * The Mac's own "choose files" box (the side panel can't show one itself).

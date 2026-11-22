@@ -111,7 +111,12 @@ async function start({ port, log = (s) => process.stdout.write(`${new Date().toL
   }
   if (!server) throw new Error("hum couldn't find a free port.");
   fs.writeFileSync(portFile(), String(server.port));
-  try { const P = require('./mac').panel; P.setUrl(`${server.url}?panel=1`); if (P.status().running) P.reload(); } catch (e) { log(`side panel: ${e.message}`); }
+  try {
+    const P = require('./mac').panel;
+    P.setUrl(`${server.url}?panel=1`);
+    if (P.upgrade()) log('side panel: swapped in the newer panel program'); // after an update
+    else if (P.status().running) P.reload();
+  } catch (e) { log(`side panel: ${e.message}`); }
 
   const saved = () => { Lib.save(lib); return Lib.view(lib); };
   const need = (tid) => { const t = Lib.track(lib, tid); if (!t) throw Object.assign(new Error("That song isn't in hum any more."), { status: 404 }); return t; };
@@ -166,6 +171,14 @@ async function start({ port, log = (s) => process.stdout.write(`${new Date().toL
         if (b.eq && typeof b.eq === 'object') for (const k of ['bass', 'mid', 'treble']) if (Number.isFinite(b.eq[k])) s.eq[k] = Math.max(-12, Math.min(12, b.eq[k]));
         Lib.save(lib);
         return { settings: s };
+      }
+      case 'size': {
+        // small or full, from the panel itself; small fits what's showing (taller while a YouTube video plays)
+        if (lib.settings.mini !== !!b.mini) { lib.settings.mini = !!b.mini; Lib.save(lib); }
+        const M = require('./mac');
+        const size = M.sizeFor({ mini: !!b.mini, video: !!b.video, height: b.height });
+        M.panel.resize(size);
+        return { size };
       }
       case 'report': now = { ...(b.state || {}), at: Date.now() }; return { ok: true };
       case 'now': return { now: now && Date.now() - now.at < 15000 ? now : null, track: now && now.id ? Lib.view(lib).tracks.find((t) => t.id === now.id) || null : null, players: listeners.size };

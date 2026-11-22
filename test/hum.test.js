@@ -159,3 +159,36 @@ test('the command line', () => {
   assert.match(run(['playlists']).stdout, /Bus ride/);
   assert.match(run(['frobnicate']).stderr, /isn't a hum command/);
 });
+
+test('small or full: the sizes, YouTube\'s 200 × 200 rule, and remembering it for next time', async () => {
+  const M = require('../src/mac');
+  assert.deepStrictEqual(M.sizeFor({ mini: false }), { width: 380, height: 680, where: 'side' });
+  const small = M.sizeFor({ mini: true, height: 119 });
+  assert.deepStrictEqual(small, { width: 340, height: 119, where: 'corner' });
+  const video = M.sizeFor({ mini: true, video: true, height: 120 });
+  assert.ok(video.width - 16 >= 200 && video.height >= 330, 'room for a video at least 200 × 200');
+  assert.strictEqual(M.sizeFor({ mini: true, height: 99999 }).height, 560);
+  // the panel keeps the size for when it starts again
+  const P = M.panel;
+  fs.mkdirSync(process.env.HUM_HOME, { recursive: true });
+  fs.writeFileSync(P.files().conf, JSON.stringify({ app: 'hum', width: 380, height: 680 }));
+  P.resize(small);
+  assert.deepStrictEqual((({ width, height, where }) => ({ width, height, where }))(JSON.parse(fs.readFileSync(P.files().conf, 'utf8'))), small);
+  // after an update, an older panel program is swapped for this one (and only then)
+  fs.writeFileSync(P.files().host, '// an older panel program');
+  assert.strictEqual(P.upgrade(), true);
+  assert.strictEqual(fs.readFileSync(P.files().host, 'utf8'), P.HOST);
+  assert.strictEqual(P.upgrade(), false);
+  assert.match(P.HOST, /what === 'size'/);
+  // the page asks through the server, which remembers it
+  const S = require('../src/server');
+  const s = await S.start({ port: 0, log: () => {} });
+  try {
+    const cfg = JSON.parse((await (await fetch(s.url + '?panel=1')).text()).match(/<script id="config" type="application\/json">(.*?)<\/script>/)[1]);
+    const ask = (what, body) => fetch(new URL(cfg.base + '/api/' + what, s.url), { method: 'POST', headers: { 'content-type': 'application/json', 'x-hum': cfg.secret }, body: JSON.stringify(body) }).then((r) => r.json());
+    assert.deepStrictEqual((await ask('size', { mini: true, height: 119 })).size, small);
+    assert.strictEqual(Lib.load().settings.mini, true);
+    await ask('size', { mini: false });
+    assert.strictEqual(Lib.load().settings.mini, false);
+  } finally { await s.close(); }
+});

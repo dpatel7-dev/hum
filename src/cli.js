@@ -30,6 +30,7 @@ const HELP = `
   hum play [words]        play (or find a song and play it)      hum pause · next · prev
   hum now                 what's playing
   hum list [words]        your songs            hum playlists     your playlists
+  hum small · hum big     a small player tucked in the corner, or the full panel (or press M)
   hum app                 hum in a window instead of the panel
   hum doctor              check every part, if something doesn't work
   hum off · update · uninstall · help · --version
@@ -218,6 +219,12 @@ async function main(argv) {
     case 'pause': case 'next': case 'prev': case 'previous': case 'toggle': {
       const r = await ask('remote', { cmd: cmd === 'previous' ? 'prev' : cmd });
       if (!r.players) out(dim('  The player isn\'t open: hum'));
+      return;
+    }
+    case 'small': case 'mini': case 'big': case 'full': {
+      const small = cmd === 'small' || cmd === 'mini';
+      const r = await ask('remote', { cmd: 'size', arg: small ? 'small' : 'big' });
+      if (!r.players) { await ask('size', { mini: small }); out(`  hum will open ${small ? 'small, in the corner' : 'as the full panel'} next time.`); }
       return;
     }
     case 'now': case 'status': {

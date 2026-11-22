@@ -16,7 +16,7 @@ const file = () => path.join(home(), 'library.json');
 const artDir = () => path.join(home(), 'art');
 const musicDir = () => path.join(home(), 'music');
 const id = () => crypto.randomBytes(6).toString('hex');
-const DEFAULTS = { volume: 0.8, shuffle: false, repeat: 'off', eq: { bass: 0, mid: 0, treble: 0 }, port: 8721, key: '^~m' };
+const DEFAULTS = { volume: 0.8, shuffle: false, repeat: 'off', eq: { bass: 0, mid: 0, treble: 0 }, port: 8721, key: '^~m', mini: false };
 
 function load() {
   let d = {};

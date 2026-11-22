@@ -16,6 +16,7 @@
     <label class="find"><input id="q" type="search" placeholder="Find a song" autocomplete="off" spellcheck="false" aria-label="Find a song"></label>
     <button class="icon" id="addBtn" title="Add music" aria-label="Add music">+</button>
     <button class="icon" id="moreBtn" title="More" aria-label="More">⋯</button>
+    <button class="icon sm" id="smallBtn" title="Make hum small, in the corner (M)" aria-label="Make hum small" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3v5H3M3 3l5 5M12 17v-5h5M17 17l-5-5"/></svg></button>
   </header>
 
   <div class="cols">
@@ -37,6 +38,7 @@
         <button class="play" id="playBtn" title="Play (space)" aria-label="Play"><svg viewBox="0 0 20 20" aria-hidden="true" id="playIcon"><path d="M7 5l9 5-9 5z"/></svg></button>
         <button class="icon" id="nextBtn" title="Next (⇧→)" aria-label="Next"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14 5v10M5 5l7 5-7 5z"/></svg></button>
         <button class="icon sm" id="repBtn" data-r="off" title="Repeat (R)" aria-label="Repeat: off"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 9V8a2 2 0 012-2h9l-2-2M16 11v1a2 2 0 01-2 2H5l2 2"/></svg><b id="repOne" hidden>1</b></button>
+        <button class="icon sm" id="bigBtn" title="Make hum big again (M)" aria-label="Make hum big again"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8V3h5M3 3l5 5M17 12v5h-5M17 17l-5-5"/></svg></button>
       </div>
       <div class="sub">
         <label class="vol" title="Volume (↑ ↓)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8h3l4-3v10l-4-3H4z M14 7.5a3.5 3.5 0 010 5"/></svg><input type="range" id="vol" min="0" max="1" step="0.01" aria-label="Volume"></label>

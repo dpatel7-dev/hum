@@ -38,6 +38,8 @@
     render();
   }
 
+  var garden = null; // the dancing flowers (started at the end)
+
   // ── Bumble ──
   var BEE = ['............', '...ww.ww....', '...wWwWw..a.', '..YYKYYKkka.', '.yYYKYYKkEk.', 'KyYYKYYKkkk.', '..yyKyyKkk..', '....l.l.....', '............'];
   var BEE_UP = ['...w...w....', '..wWw.wWw...', '...ww.ww..a.', '..YYKYYKkka.', '.yYYKYYKkEk.', 'KyYYKYYKkkk.', '..yyKyyKkk..', '....l.l.....', '............'];
@@ -63,18 +65,53 @@
       var bass = actx.createBiquadFilter(); bass.type = 'lowshelf'; bass.frequency.value = 120;
       var mid = actx.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 0.9;
       var treble = actx.createBiquadFilter(); treble.type = 'highshelf'; treble.frequency.value = 6000;
-      analyser = actx.createAnalyser(); analyser.fftSize = 256; levelBuf = new Uint8Array(analyser.frequencyBinCount);
+      analyser = actx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.55; levelBuf = new Uint8Array(analyser.frequencyBinCount);
       src.connect(bass); bass.connect(mid); mid.connect(treble); treble.connect(analyser); analyser.connect(actx.destination);
       nodes = { bass: bass, mid: mid, treble: treble };
       applyEq();
     } catch (e) { actx = null; }
   }
   function applyEq() { if (!nodes) return; var q = L.settings.eq || {}; nodes.bass.gain.value = q.bass || 0; nodes.mid.gain.value = q.mid || 0; nodes.treble.gain.value = q.treble || 0; }
-  function level() {
-    if (!analyser || audio.paused || !S.cur || S.cur.kind !== 'file') return S.playing ? 0.12 : 0;
-    analyser.getByteFrequencyData(levelBuf);
-    var sum = 0; for (var i = 2; i < 40; i++) sum += levelBuf[i];
-    return Math.min(1, sum / (38 * 200));
+  // ── the ear: what the music is doing, for the dancing garden ──
+  // For your own files hum can hear the music: how loud, the bass, the middle and the treble,
+  // and the beat (the bass jumping above what it's been doing). YouTube's player keeps its
+  // sound to itself, so for YouTube songs the garden keeps its own easy time.
+  var E = { level: 0, bass: 0, mid: 0, high: 0, beat: false, drop: false, bpm: 0, hears: false, playing: false, song: '', last: 0, prev: 0, hist: [], gaps: [], lastDrop: 0 };
+  function hit(now) {
+    var gap = now - E.last;
+    if (E.last && gap > 300 && gap < 1500) {
+      E.gaps.push(gap); if (E.gaps.length > 8) E.gaps.shift();
+      var g = E.gaps.slice().sort(function (a, b) { return a - b; });
+      E.bpm = Math.round(60000 / g[g.length >> 1]);
+    }
+    E.last = now; E.beat = true;
+    var th = $('thumb'); th.style.marginTop = '-2px'; setTimeout(function () { th.style.marginTop = ''; }, 110); // Bumble bobs too
+  }
+  function ear() {
+    var now = performance.now(), id = S.cur ? S.cur.id : '';
+    E.beat = false; E.drop = false; E.playing = !!S.playing;
+    if (id !== E.song) { E.song = id; E.hist = []; E.gaps = []; E.bpm = 0; }
+    E.hears = !!(analyser && S.cur && S.cur.kind === 'file' && !audio.paused);
+    if (E.hears) {
+      analyser.getByteFrequencyData(levelBuf);
+      var bin = actx.sampleRate / analyser.fftSize; // about 45 Hz
+      var band = function (lo, hi) { var a = Math.max(1, Math.round(lo / bin)), b = Math.max(a + 1, Math.round(hi / bin)), sum = 0; for (var i = a; i < b; i++) sum += levelBuf[i]; return sum / ((b - a) * 255); };
+      E.bass = band(40, 160); E.mid = band(300, 2000); E.high = band(4000, 12000);
+      E.level = Math.min(1, E.bass * 0.45 + E.mid * 0.9 + E.high * 0.5);
+      var h = E.hist, mean = 0, sd = 0, i;
+      for (i = 0; i < h.length; i++) mean += h[i];
+      mean /= h.length || 1;
+      for (i = 0; i < h.length; i++) sd += (h[i] - mean) * (h[i] - mean);
+      sd = Math.sqrt(sd / (h.length || 1));
+      if (h.length > 10 && E.bass > E.prev && E.bass > mean + Math.max(0.035, sd * 1.1) && now - E.last > 270) hit(now);
+      if (h.length > 30 && E.bass > mean * 1.6 + 0.12 && E.level > 0.45 && now - E.lastDrop > 8000) { E.drop = true; E.lastDrop = now; }
+      E.prev = E.bass; h.push(E.bass); if (h.length > 60) h.shift();
+    } else {
+      E.bass *= 0.9; E.mid *= 0.9; E.high *= 0.9;
+      E.level = E.playing ? 0.3 : E.level * 0.9;
+      if (E.playing && now - E.last >= 60000 / 92) hit(now);
+    }
+    return E;
   }
 
   var yt = null, ytReady = false, ytWant = null, ytTimer = 0;
@@ -123,6 +160,7 @@
     if (!t) return;
     S.cur = t;
     $('videoBox').hidden = t.kind !== 'youtube';
+    fitPanel();
     if (t.kind === 'youtube') {
       audio.pause();
       loadYouTube(function () { yt.loadVideoById({ videoId: t.yt, startSeconds: at }); });
@@ -165,6 +203,7 @@
     S.qi--; playTrack(byId[S.queue[S.qi]]);
   }
   function ended() {
+    if (garden) garden.bow(); // the flowers take a bow
     if (S.sleepEnd) { S.sleepEnd = false; S.playing = false; playIcon(); toast('Sleep timer: stopped.'); sleepChip(); return; }
     if (L.settings.repeat === 'one') { seek(0); if (S.cur.kind === 'youtube') yt.playVideo(); else audio.play(); return; }
     next(true);
@@ -228,7 +267,7 @@
     $('repBtn').dataset.r = L.settings.repeat; $('repOne').hidden = L.settings.repeat !== 'one';
     $('repBtn').setAttribute('aria-label', 'Repeat: ' + L.settings.repeat);
   }
-  function like(t) { api('like', { id: t.id, on: !t.liked }).then(function (r) { var was = t.liked; setLib(r.library); if (S.cur && S.cur.id === t.id) S.cur = byId[t.id] || S.cur; nowCard(); toast(was ? 'Removed from Liked' : 'Added to Liked'); }).catch(fail); }
+  function like(t) { api('like', { id: t.id, on: !t.liked }).then(function (r) { var was = t.liked; setLib(r.library); if (!was && garden) garden.heart(); if (S.cur && S.cur.id === t.id) S.cur = byId[t.id] || S.cur; nowCard(); toast(was ? 'Removed from Liked' : 'Added to Liked'); }).catch(fail); }
 
   function mediaSession() {
     if (!navigator.mediaSession || !S.cur) return;
@@ -528,7 +567,34 @@
     else if (e.key === 'l' || e.key === 'L') { if (S.cur) like(S.cur); }
     else if (e.key === 's' || e.key === 'S') $('shufBtn').click();
     else if (e.key === 'r' || e.key === 'R') $('repBtn').click();
+    else if ((e.key === 'm' || e.key === 'M') && inPanel) setMini(!mini);
   });
+
+  // ── small: a little player tucked in the corner, or the full panel ──
+  var mini = false, sent = '';
+  function setMini(on, quiet) {
+    if (!inPanel) return;
+    mini = !!on;
+    document.documentElement.classList.toggle('mini', mini);
+    closeMenu();
+    if (garden) garden.redraw();
+    fitPanel(true);
+    if (!quiet) toast(mini ? 'Small. Press M, or the arrows button, to make it big again.' : 'Full size.');
+  }
+  // tell the panel how big to be: small fits what's showing, and is taller while a YouTube video plays
+  function fitPanel(force) {
+    if (!inPanel) return;
+    requestAnimationFrame(function () {
+      var video = !!(S.cur && S.cur.kind === 'youtube');
+      var h = mini ? Math.ceil($('now').getBoundingClientRect().bottom + $('garden').offsetHeight + 8) : 0;
+      var key = mini + ':' + video + ':' + h;
+      if (key === sent && !force) return;
+      sent = key;
+      api('size', { mini: mini, video: video, height: h }).catch(function () {});
+    });
+  }
+  $('smallBtn').onclick = function () { setMini(true); };
+  $('bigBtn').onclick = function () { setMini(false); };
 
   // ── the panel, and the command line ──
   function hidePanel() { api('panel', { do: 'hide' }).catch(function () {}); }
@@ -551,6 +617,7 @@
       else if (m.cmd === 'vol') setVol(L.settings.volume + (Number(m.arg) || 0));
       else if (m.cmd === 'shuffle') $('shufBtn').click();
       else if (m.cmd === 'reload') api('library').then(setLib);
+      else if (m.cmd === 'size') setMini(m.arg === 'small', true);
     };
   }
 
@@ -560,7 +627,8 @@
     if (r.now && r.now.queueIds && r.now.queueIds.length) { S.queue = r.now.queueIds.filter(function (id) { return byId[id]; }); S.qi = Math.min(r.now.qi, S.queue.length - 1); S.cur = byId[S.queue[S.qi]] || null; nowCard(); }
     S.tab = r.tracks.length ? (S.queue.length > S.qi + 1 ? 'queue' : 'songs') : 'songs';
     renderRows();
+    if (inPanel) { $('smallBtn').hidden = false; setMini(!!L.settings.mini, true); }
     listen();
   }).catch(fail);
-  if (window.Garden) window.Garden.start($('garden'), { night: function () { return dark.matches; }, level: level });
+  garden = window.Garden ? window.Garden.start($('garden'), { night: function () { return dark.matches; }, ear: ear, px: function () { return mini ? 2 : 3; } }) : null;
 })();

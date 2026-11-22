@@ -49,7 +49,7 @@ input { font: inherit; color: inherit; }
 
 /* now playing */
 .now { margin: 4px 10px 6px; padding: 12px 12px 10px; border-radius: 16px; background: var(--card); border: 1px solid var(--edge); }
-.video { margin: -2px -2px 10px; border-radius: 11px; overflow: hidden; aspect-ratio: 16 / 9; background: #000; }
+.video { margin: -2px -2px 10px; border-radius: 11px; overflow: hidden; aspect-ratio: 16 / 9; min-height: 200px; background: #000; } /* YouTube's player: at least 200 × 200 */
 .video iframe, .video #yt { width: 100%; height: 100%; display: block; border: 0; }
 .np { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .art { width: 64px; height: 64px; border-radius: 10px; background: var(--honey-soft) center / cover no-repeat; position: relative; overflow: hidden; box-shadow: 0 6px 16px -8px rgba(0, 0, 0, .35); }
@@ -119,6 +119,28 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px;
 .ytrow input { flex: 1; min-width: 0; border: 1px solid var(--edge); background: var(--cardon); border-radius: 9px; padding: 6px 9px; -webkit-user-select: text; user-select: text; }
 
 #garden { position: absolute; left: 0; right: 0; bottom: 0; height: 66px; width: 100%; image-rendering: pixelated; pointer-events: none; }
+#bigBtn { display: none; }
+
+/* small: a little player tucked in the bottom right corner, with the garden under it */
+html.mini .top, html.mini .lists, html.mini .sub, html.mini .heart, html.mini #shufBtn, html.mini #repBtn { display: none; }
+html.mini #bigBtn { display: inline-grid; }
+html.mini .cols { flex: none; }
+html.mini .now { margin: 8px 8px 0; padding: 9px 9px 2px 10px; border-radius: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "video video" "np ctl" "seek seek"; gap: 0 6px; align-items: center; }
+html.mini .video { grid-area: video; margin: -1px -1px 9px; aspect-ratio: auto; height: 200px; }
+html.mini .np { grid-area: np; grid-template-columns: 38px minmax(0, 1fr); gap: 9px; }
+html.mini .art { width: 38px; height: 38px; border-radius: 8px; box-shadow: none; }
+html.mini .art canvas { width: 24px; height: 18px; }
+html.mini .title { font-size: 13.5px; -webkit-line-clamp: 1; }
+html.mini .by { font-size: 11.5px; margin-top: 0; }
+html.mini .ctl { grid-area: ctl; margin: 0; gap: 0; }
+html.mini .ctl .icon { width: 28px; height: 28px; }
+html.mini .play { width: 36px; height: 36px; margin: 0 2px; box-shadow: 0 6px 14px -8px rgba(201, 140, 10, .6); }
+html.mini .play svg { width: 17px; height: 17px; }
+html.mini .seek { grid-area: seek; grid-template-columns: minmax(0, 1fr); margin: 4px 0 0; }
+html.mini .seek .t { display: none; }
+html.mini #garden { position: static; display: block; height: 30px; margin-top: 2px; }
+html.mini .toast { bottom: 6px; left: 6px; right: 6px; padding: 7px 9px; font-size: 12px; }
+html.mini .drop { inset: 4px; font-size: 14px; }
 
 .menu { position: fixed; z-index: 20; min-width: 200px; max-width: 300px; background: var(--cardon); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6); border: 1px solid var(--edge); border-radius: 12px; padding: 5px; box-shadow: 0 16px 40px -16px rgba(0, 0, 0, .45); }
 @media (prefers-color-scheme: dark) { .menu { background: rgba(40, 42, 50, .92); } }
