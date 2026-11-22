@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>hum</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="hum.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <canvas id="bee" width="12" height="9" aria-hidden="true"></canvas>
+    <h1>hum</h1>
+    <label class="find"><input id="q" type="search" placeholder="Find a song" autocomplete="off" spellcheck="false" aria-label="Find a song"></label>
+    <button class="icon" id="addBtn" title="Add music" aria-label="Add music">+</button>
+    <button class="icon" id="moreBtn" title="More" aria-label="More">⋯</button>
+  </header>
+
+  <div class="cols">
+    <section class="now" id="now" aria-label="Now playing">
+      <div class="video" id="videoBox" hidden><div id="yt"></div></div>
+      <div class="np">
+        <div class="art" id="art" aria-hidden="true"></div>
+        <div class="who"><div class="title" id="npTitle">Nothing playing</div><div class="by" id="npBy">Add some music to start</div></div>
+        <button class="heart" id="likeBtn" aria-pressed="false" title="Like (L)" aria-label="Like">♥</button>
+      </div>
+      <div class="seek">
+        <span class="t" id="tNow">0:00</span>
+        <div class="bar" id="bar" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="fill"></i><canvas id="thumb" width="12" height="9" aria-hidden="true"></canvas></div>
+        <span class="t" id="tAll">0:00</span>
+      </div>
+      <div class="ctl">
+        <button class="icon sm" id="shufBtn" aria-pressed="false" title="Shuffle (S)" aria-label="Shuffle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h3l7 8h4M3 14h3l2-2.3M11 8.3L13 6h4M15 4l2 2-2 2M15 12l2 2-2 2"/></svg></button>
+        <button class="icon" id="prevBtn" title="Previous (⇧←)" aria-label="Previous"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 5v10M15 5l-7 5 7 5z"/></svg></button>
+        <button class="play" id="playBtn" title="Play (space)" aria-label="Play"><svg viewBox="0 0 20 20" aria-hidden="true" id="playIcon"><path d="M7 5l9 5-9 5z"/></svg></button>
+        <button class="icon" id="nextBtn" title="Next (⇧→)" aria-label="Next"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14 5v10M5 5l7 5-7 5z"/></svg></button>
+        <button class="icon sm" id="repBtn" data-r="off" title="Repeat (R)" aria-label="Repeat: off"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 9V8a2 2 0 012-2h9l-2-2M16 11v1a2 2 0 01-2 2H5l2 2"/></svg><b id="repOne" hidden>1</b></button>
+      </div>
+      <div class="sub">
+        <label class="vol" title="Volume (↑ ↓)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8h3l4-3v10l-4-3H4z M14 7.5a3.5 3.5 0 010 5"/></svg><input type="range" id="vol" min="0" max="1" step="0.01" aria-label="Volume"></label>
+        <span class="sp"></span>
+        <button class="chip" id="sleepBtn" title="Sleep timer">Sleep</button>
+        <button class="chip" id="eqBtn" title="Bass, middle and treble">EQ</button>
+      </div>
+    </section>
+
+    <section class="lists">
+      <nav class="tabs" id="tabs" role="tablist">
+        <button data-t="queue" role="tab">Up next</button><button data-t="songs" role="tab">Songs</button><button data-t="lists" role="tab">Playlists</button><button data-t="liked" role="tab">Liked</button>
+      </nav>
+      <div class="listhead" id="listHead"></div>
+      <ul class="rows" id="rows" aria-live="polite"></ul>
+    </section>
+  </div>
+
+  <canvas id="garden" aria-hidden="true"></canvas>
+</div>
+
+<input type="file" id="files" accept="audio/*,.mp3,.m4a,.wav,.flac,.aiff,.aif,.ogg" multiple hidden>
+<div class="menu" id="menu" hidden></div>
+<div class="drop" id="drop" hidden><div>Drop music here<span>mp3, m4a, wav, flac or aiff: copied into hum</span></div></div>
+<dialog id="sheet"><form method="dialog" class="sheet" id="sheetForm"><h3 id="shTitle"></h3><div id="shBody"></div><div class="acts" id="shActs"></div></form></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script id="config" type="application/json">__CONFIG__</script>
+<script src="scene.js"></script>
+<script src="garden.js"></script>
+<script src="hum.js"></script>
+</body>
+</html>
