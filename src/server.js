@@ -37,6 +37,27 @@ function sendFile(req, res, file, type) {
   fs.createReadStream(file).pipe(res);
 }
 
+const MAX_UPLOAD = 600 * 1024 * 1024;
+/** Save a dropped music file into hum's music folder. Resolves where it went. */
+function saveUpload(req, name) {
+  return new Promise((resolve, reject) => {
+    name = path.basename(String(name || 'song.mp3')).replace(/[/\\:\0]/g, '_').slice(0, 200);
+    if (!require('./tags').isAudio(name)) { req.resume(); return reject(new Error(`hum plays music files (mp3, m4a, wav, flac, aiff). "${name}" isn't one.`)); }
+    fs.mkdirSync(Lib.musicDir(), { recursive: true });
+    let f = path.join(Lib.musicDir(), name);
+    for (let k = 2; fs.existsSync(f); k++) f = path.join(Lib.musicDir(), name.replace(/(\.[^.]+)$/, ` ${k}$1`));
+    const tmp = f + '.part';
+    const out = fs.createWriteStream(tmp);
+    let size = 0, failed = false;
+    const bail = (e) => { if (failed) return; failed = true; out.destroy(); fs.rmSync(tmp, { force: true }); reject(e); };
+    req.on('data', (c) => { size += c.length; if (size > MAX_UPLOAD) { bail(Object.assign(new Error(`${name} is too big.`), { status: 413 })); req.destroy(); } });
+    req.on('error', bail);
+    out.on('error', bail);
+    out.on('finish', () => { if (failed) return; if (!size) { fs.rmSync(tmp, { force: true }); return reject(new Error(`${name} came through empty.`)); } fs.renameSync(tmp, f); resolve(f); });
+    req.pipe(out);
+  });
+}
+
 async function start({ port, log = (s) => process.stdout.write(`${new Date().toLocaleTimeString()}  ${s}\n`) } = {}) {
   let lib = Lib.load();
   const sec = secret();
@@ -61,6 +82,17 @@ async function start({ port, log = (s) => process.stdout.write(`${new Date().toL
           }
           m = /^\/art\/([a-f0-9]{16}\.(?:png|jpg))$/.exec(rest);
           if (m) { sendFile(req, res, path.join(Lib.artDir(), m[1]), m[1].endsWith('.png') ? 'image/png' : 'image/jpeg'); return true; }
+          if (rest === '/upload' && req.method === 'POST') {
+            // a dropped music file, sent as it is (not squeezed into JSON)
+            if (req.headers['x-hum'] !== sec) { send(403, { error: 'not allowed' }); return true; }
+            saveUpload(req, url.searchParams.get('name')).then((f) => {
+              lib = Lib.load();
+              const r = Lib.addPaths(lib, [f]);
+              Lib.save(lib);
+              send(200, { added: r.added.length, library: Lib.view(lib) });
+            }, (e) => send(e.status || 400, { error: e.message }));
+            return true;
+          }
           if (rest === '/events') {
             // commands from the command line arrive here (the player listens)
             if (url.searchParams.get('s') !== sec) { send(403, { error: 'not allowed' }); return true; }
@@ -97,16 +129,16 @@ async function start({ port, log = (s) => process.stdout.write(`${new Date().toL
         const r = Lib.addPaths(lib, Lib.usualPlaces());
         return { added: r.added.length, skipped: r.skipped, where: Lib.usualPlaces().map((p) => p.replace(os.homedir(), '~')), library: saved() };
       }
-      case 'upload': {
-        const name = path.basename(String(b.name || 'song.mp3')).replace(/[/\\:]/g, '_');
-        if (!require('./tags').isAudio(name)) throw new Error(`hum plays music files (mp3, m4a, wav, flac, aiff). "${name}" isn't one.`);
-        fs.mkdirSync(Lib.musicDir(), { recursive: true });
-        let f = path.join(Lib.musicDir(), name);
-        for (let k = 2; fs.existsSync(f); k++) f = path.join(Lib.musicDir(), name.replace(/(\.[^.]+)$/, ` ${k}$1`));
-        fs.writeFileSync(f, Buffer.from(String(b.b64 || ''), 'base64'));
-        const r = Lib.addPaths(lib, [f]);
-        return { added: r.added.length, track: r.added[0] ? r.added[0].id : null, library: saved() };
+      case 'choose': {
+        // the Mac's own file box (the side panel can't open one itself)
+        if (process.platform !== 'darwin') throw new Error('Drop music files here instead.');
+        const paths = await require('./mac').chooseMusic(b.what === 'folder' ? 'folder' : 'files');
+        if (!paths.length) return { added: 0, skipped: 0, cancelled: true, library: Lib.view(lib) };
+        lib = Lib.load();
+        const r = Lib.addPaths(lib, paths);
+        return { added: r.added.length, skipped: r.skipped, library: saved() };
       }
+      case 'yt-name': { const changed = Lib.nameYoutube(lib, b.id, b.title, b.author); return changed ? { library: saved() } : { ok: true }; }
       case 'youtube': {
         const r = await Lib.addYoutube(lib, b.url);
         return { track: r.track.id, already: r.already, library: saved() };

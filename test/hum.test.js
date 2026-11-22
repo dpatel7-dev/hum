@@ -80,6 +80,18 @@ test('the library: adds folders once, keeps pictures once, playlists, YouTube li
   assert.equal(y.track.kind, 'youtube');
   assert.equal((await Lib.addYoutube(lib, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', { fetchInfo: false })).already, true);
   await assert.rejects(Lib.addYoutube(lib, 'not a link'), /YouTube link/);
+  // links as people paste them
+  for (const u of ['www.youtube.com/watch?v=dQw4w9WgXcQ&list=RD', 'youtu.be/dQw4w9WgXcQ?si=abc', 'https://youtube.com/shorts/dQw4w9WgXcQ', 'https://m.youtube.com/watch?feature=shared&v=dQw4w9WgXcQ', 'https://music.youtube.com/watch?v=dQw4w9WgXcQ', ' https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ ']) assert.equal(Lib.youtubeId(u), 'dQw4w9WgXcQ', u);
+  // can't reach YouTube (school network, proxy): still added, named later
+  const off = await Lib.addYoutube(lib, 'https://youtu.be/aaaaaaaaaaa', { fetcher: async () => { throw new Error('ECONNREFUSED'); } });
+  assert.equal(off.track.named, false);
+  const filt = await Lib.addYoutube(lib, 'https://youtu.be/bbbbbbbbbbb', { fetcher: async () => ({ ok: false, status: 403, json: async () => { throw new Error('html'); } }) });
+  assert.equal(filt.track.named, false, "a network filter's 403 isn't YouTube saying no");
+  await assert.rejects(Lib.addYoutube(lib, 'https://youtu.be/ccccccccccc', { fetcher: async () => ({ ok: false, status: 401 }) }), /outside YouTube/);
+  const good = await Lib.addYoutube(lib, 'https://youtu.be/ddddddddddd', { fetcher: async () => ({ ok: true, status: 200, json: async () => ({ title: 'Artist Name - The Song (Lyrics)', author_name: 'Artist Name - Topic' }) }) });
+  assert.deepEqual([good.track.title, good.track.artist, good.track.named], ['The Song', 'Artist Name', true]);
+  assert.equal(Lib.nameYoutube(lib, good.track.id, 'Other', 'x'), false, 'a named song keeps its name');
+  assert.equal(Lib.nameYoutube(lib, off.track.id, 'Band - Tune', ''), true);
   Lib.remove(lib, [honey.id]);
   assert.equal(lib.playlists[0].tracks.length, 0, 'gone from playlists too');
   Lib.save(lib);
@@ -119,10 +131,22 @@ test("the server: pieces of songs, pictures, commands for the player, playlists"
     await ask('report', { state: { id: honey.id, title: 'Honey Morning', playing: true, pos: 12, dur: 180 } });
     assert.equal((await ask('now')).now.pos, 12);
     assert.equal((await ask('settings', { volume: 2, repeat: 'one' })).settings.volume, 1);
-    await assert.rejects(ask('upload', { name: 'virus.exe', b64: 'AAAA' }), /music files/);
-    const up = await ask('upload', { name: 'new song.mp3', b64: fs.readFileSync(path.join(MUSIC, 'Album', 'honey.mp3')).toString('base64') });
+    // a dropped file arrives as it is
+    const send = (name, body, key = s.secret) => fetch(`${base}/upload?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'x-hum': key, 'content-type': 'application/octet-stream' }, body });
+    assert.equal((await send('song.mp3', 'x', 'wrong')).status, 403);
+    assert.match((await (await send('virus.exe', 'AAAA')).json()).error, /music files/);
+    const up = await (await send('new song.mp3', fs.readFileSync(path.join(MUSIC, 'Album', 'honey.mp3')))).json();
     assert.equal(up.added, 1);
     assert.ok(fs.existsSync(path.join(Lib.musicDir(), 'new song.mp3')));
+    assert.ok(!fs.readdirSync(Lib.musicDir()).some((f) => f.endsWith('.part')));
+    // a YouTube song added while YouTube can't be reached gets its name from the player later
+    const y = await ask('youtube', { url: 'youtu.be/jNQXAC9IVRw' });
+    const yt = y.library.tracks.find((t) => t.id === y.track);
+    if (yt.unnamed) {
+      const named = await ask('yt-name', { id: yt.id, title: 'jawed - Me at the zoo (Official Video)', author: 'jawed' });
+      const t2 = named.library.tracks.find((t) => t.id === yt.id);
+      assert.deepEqual([t2.title, t2.artist, t2.unnamed], ['Me at the zoo', 'jawed', false]);
+    }
   } finally { await s.close(); }
 });
 

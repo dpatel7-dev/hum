@@ -14,9 +14,18 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function mmss(s) { s = Math.max(0, Math.floor(s || 0)); var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
+  function answer(r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'hum had a problem (' + r.status + ').'); return j; }); }
   function api(what, body) {
     return fetch(C.base + '/api/' + what, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hum': C.secret }, body: JSON.stringify(body || {}) })
-      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'hum had a problem.'); return j; }); });
+      .then(answer, gone);
+  }
+  // hum's background part stopped (or this page outlived it): say so plainly, and carry on when it's back
+  var downT = 0;
+  function gone() {
+    if (!downT) downT = setInterval(function () {
+      fetch(C.base + '/api/library', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hum': C.secret }, body: '{}' }).then(answer).then(function (r) { clearInterval(downT); downT = 0; setLib(r); toast('hum is back.'); }).catch(function () {});
+    }, 3000);
+    throw new Error(C.mac ? 'hum\'s background part isn\'t running. In Terminal, type: hum on' : 'hum isn\'t running any more. In Terminal, type: hum');
   }
   var toastT = 0;
   function toast(t) { var el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { el.hidden = true; }, 2600); }
@@ -86,7 +95,11 @@
         onReady: function () { ytReady = true; yt.setVolume(Math.round(L.settings.volume * 100)); if (ytWant) { var f = ytWant; ytWant = null; f(); } },
         onStateChange: function (e) {
           if (!S.cur || S.cur.kind !== 'youtube') return;
-          if (e.data === 1) { S.playing = true; if (!S.cur.dur) { var d = yt.getDuration(); if (d > 0) api('dur', { id: S.cur.id, sec: d }); } }
+          if (e.data === 1) {
+            S.playing = true;
+            if (!S.cur.dur) { var d = yt.getDuration(); if (d > 0) api('dur', { id: S.cur.id, sec: d }); }
+            if (S.cur.unnamed) { var v = yt.getVideoData ? yt.getVideoData() : null; if (v && v.title) { var who = S.cur.id; api('yt-name', { id: who, title: v.title, author: v.author }).then(function (x) { if (x.library) { setLib(x.library); if (S.cur && S.cur.id === who) { S.cur = byId[who]; nowCard(); } } }).catch(function () {}); } }
+          }
           else if (e.data === 2) S.playing = false;
           else if (e.data === 0) { S.playing = false; ended(); }
           playIcon(); report();
@@ -257,8 +270,8 @@
   }
   function emptyLib() {
     return '<li class="empty"><b>Add your music</b>Music files on this Mac (mp3, m4a, wav, flac, aiff), or songs from YouTube, which play in YouTube\'s own player.' +
-      '<div class="acts"><button class="btn main" data-do="scan">Find music on this Mac</button><button class="btn" data-do="files">Choose files…</button>' +
-      '<form class="ytrow" data-do="yt"><input type="url" placeholder="Paste a YouTube link" aria-label="A YouTube link"><button class="btn">Add</button></form>' +
+      '<div class="acts"><button class="btn main" data-do="scan">Find music on this Mac</button><button class="btn" data-do="files">Choose files…</button>' + (C.mac ? '<button class="btn" data-do="folder">Choose a folder…</button>' : '') +
+      '<form class="ytrow" data-do="yt" novalidate><input type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a YouTube link" aria-label="A YouTube link"><button class="btn">Add</button></form>' +
       '<span class="small" style="font-size:12px">Or drop music files anywhere here.</span></div></li>';
   }
   function renderRows() {
@@ -321,7 +334,15 @@
 
   function act(what) {
     if (what === 'scan') { toast('Looking in Music, Downloads, Desktop and Documents…'); return api('scan').then(function (r) { setLib(r.library); toast(r.added ? 'Found ' + plural(r.added, 'song') + '.' : 'No new music there. Try Choose files, or drop some here.'); }).catch(fail); }
-    if (what === 'files') return $('files').click();
+    if (what === 'files' || what === 'folder') {
+      if (!C.mac) return $('files').click();
+      toast(what === 'folder' ? 'Pick a folder in the box that opened…' : 'Pick songs in the box that opened (⌘-click for several)…');
+      return api('choose', { what: what }).then(function (r) {
+        setLib(r.library);
+        if (r.cancelled) { toast('Nothing added.'); return; }
+        toast(r.added ? 'Added ' + plural(r.added, 'song') + '.' : r.skipped ? 'Those are already here (or aren\'t songs hum can play).' : 'No music files there.');
+      }).catch(fail);
+    }
     if (what === 'clearq') { S.queue = S.queue.slice(0, S.qi + 1); renderRows(); return; }
     if (what === 'newlist') return askText('A new playlist', 'Name', '', 'Make it').then(function (n) { if (n) return api('pl-new', { name: n }).then(function (r) { setLib(r.library); S.tab = 'list'; S.list = r.playlist; renderRows(); }); }).catch(fail);
     if (what === 'backlists') { S.tab = 'lists'; S.list = null; renderRows(); return; }
@@ -383,7 +404,7 @@
     };
   }
   $('addBtn').onclick = function () {
-    var m = menu('<button data-a="scan">Find music on this Mac</button><button data-a="files">Choose music files…</button><button data-a="yt">Add a YouTube link…</button>', $('addBtn'));
+    var m = menu('<button data-a="scan">Find music on this Mac</button><button data-a="files">Choose music files…</button>' + (C.mac ? '<button data-a="folder">Choose a folder of music…</button>' : '') + '<button data-a="yt">Add a YouTube link…</button>', $('addBtn'));
     m.onclick = function (e) {
       var b = e.target.closest('[data-a]'); if (!b) return; closeMenu();
       if (b.dataset.a === 'yt') askText('A song from YouTube', 'Paste the link (it plays in YouTube\'s own player, here)', '', 'Add').then(function (u) { if (u) addYoutube(u); });
@@ -458,7 +479,19 @@
   function addYoutube(url) {
     if (!url || !url.trim()) return;
     toast('Adding…');
-    api('youtube', { url: url.trim() }).then(function (r) { setLib(r.library); toast(r.already ? 'That one is already here.' : 'Added "' + (byId[r.track] || {}).title + '"'); }).catch(fail);
+    api('youtube', { url: url.trim() }).then(function (r) {
+      setLib(r.library);
+      var t = byId[r.track] || {};
+      toast(r.already ? 'That one is already here.' : t.unnamed ? 'Added. It gets its name when it plays.' : 'Added "' + t.title + '"');
+      if (t.unnamed) nameFromYouTube(t);
+    }).catch(fail);
+  }
+  // when hum's background part couldn't ask YouTube for the name, this page tries (it goes through the Mac's own network settings)
+  function nameFromYouTube(t) {
+    fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + t.yt))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.title) return api('yt-name', { id: t.id, title: j.title, author: j.author_name }).then(function (x) { if (x.library) setLib(x.library); }); })
+      .catch(function () { /* it gets its name when it plays */ });
   }
   function upload(files) {
     files = Array.prototype.filter.call(files, function (f) { return /\.(mp3|m4a|wav|flac|aiff?|ogg|oga|opus|aac)$/i.test(f.name); });
@@ -468,8 +501,8 @@
     files.reduce(function (p, f) {
       return p.then(function () {
         if (f.size > 300 * 1024 * 1024) { toast(f.name + ' is too big.'); return; }
-        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).split(',')[1] || ''); }; rd.readAsDataURL(f); })
-          .then(function (b64) { return api('upload', { name: f.name, b64: b64 }); }).then(function (r) { n += r.added; setLib(r.library); });
+        return fetch(C.base + '/upload?name=' + encodeURIComponent(f.name), { method: 'POST', headers: { 'x-hum': C.secret, 'content-type': 'application/octet-stream' }, body: f })
+          .then(answer, gone).then(function (r) { n += r.added; setLib(r.library); });
       });
     }, Promise.resolve()).then(function () { toast(n ? 'Added ' + plural(n, 'song') + '.' : 'Nothing new to add.'); }).catch(fail);
   }

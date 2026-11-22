@@ -99,33 +99,52 @@ function addPaths(lib, paths) {
 /** A song from a YouTube link. It plays in YouTube's own player, which stays visible while it plays. */
 function youtubeId(url) {
   const s = String(url || '').trim();
-  const m = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/|music\.youtube\.com\/watch\?(?:.*&)?v=)([A-Za-z0-9_-]{11})/.exec(s);
+  const m = /(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/.exec(s);
   return m ? m[1] : /^[A-Za-z0-9_-]{11}$/.test(s) ? s : null;
 }
-async function addYoutube(lib, url, { fetchInfo = true } = {}) {
-  const yt = youtubeId(url);
-  if (!yt) throw new Error("That doesn't look like a YouTube link.");
-  const had = lib.tracks.find((t) => t.kind === 'youtube' && t.yt === yt);
-  if (had) return { track: had, already: true };
-  let title = 'YouTube video', artist = '';
-  if (fetchInfo) {
-    try {
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 8000);
-      const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + yt)}`, { signal: ac.signal });
-      clearTimeout(timer);
-      if (r.status === 401 || r.status === 403) throw new Error("That video can't be played outside YouTube (its owner turned that off).");
-      if (r.ok) { const j = await r.json(); title = j.title || title; artist = (j.author_name || '').replace(/\s*-\s*Topic$/, ''); }
-    } catch (e) { if (/outside YouTube/.test(e.message)) throw e; /* offline: a plain name will do */ }
-  }
-  // "Artist - Song (Official Video)" → artist and song
+
+/** "Artist - Song (Official Video)" → { title: 'Song', artist: 'Artist' } */
+function cleanTitle(title, author = '') {
+  title = String(title || '').trim();
+  let artist = String(author || '').replace(/\s*-\s*Topic$/, '').replace(/VEVO$/i, '').trim();
   const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(title);
   let song = title;
   if (m) { artist = artist && !m[1].toLowerCase().includes(artist.toLowerCase().slice(0, 4)) ? artist : m[1]; song = m[2]; }
   song = song.replace(/\s*[([](official|lyrics?|audio|video|music video|hd|4k|visuali[sz]er)[^)\]]*[)\]]/gi, '').trim() || title;
-  const t = { id: id(), kind: 'youtube', yt, title: song, artist, album: '', added: Date.now(), plays: 0, last: 0, liked: false, dur: 0 };
+  return { title: song || 'YouTube video', artist };
+}
+
+/**
+ * Add a YouTube song. Its name comes from YouTube (oEmbed). If hum can't
+ * reach YouTube from here (a school network, a proxy), the song is still
+ * added, and gets its real name from the player the first time it plays.
+ */
+async function addYoutube(lib, url, { fetchInfo = true, fetcher = (u, o) => fetch(u, o) } = {}) {
+  const yt = youtubeId(url);
+  if (!yt) throw new Error("That doesn't look like a YouTube link. Copy it from the address bar, or from Share › Copy link.");
+  const had = lib.tracks.find((t) => t.kind === 'youtube' && t.yt === yt);
+  if (had) return { track: had, already: true };
+  let info = null;
+  if (fetchInfo) {
+    let r = null;
+    try { r = await fetcher(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + yt)}`, { signal: AbortSignal.timeout(8000) }); } catch { /* can't reach YouTube from here */ }
+    // 401 is YouTube itself saying the video's owner turned off playing it on other sites
+    if (r && r.status === 401) throw new Error("That video can't be played outside YouTube (its owner turned that off).");
+    if (r && r.ok) { try { const j = await r.json(); if (j && j.title) info = cleanTitle(j.title, j.author_name); } catch { /* not JSON: a network's block page */ } }
+  }
+  const t = { id: id(), kind: 'youtube', yt, title: info ? info.title : 'YouTube song', artist: info ? info.artist : '', album: '', added: Date.now(), plays: 0, last: 0, liked: false, dur: 0, named: !!info };
   lib.tracks.push(t);
   return { track: t, already: false };
+}
+
+const needsName = (t) => t.kind === 'youtube' && (t.named === false || t.title === 'YouTube video');
+
+/** The real name, from the player (when hum couldn't ask YouTube when it was added). */
+function nameYoutube(lib, tid, title, author) {
+  const t = lib.tracks.find((x) => x.id === tid && x.kind === 'youtube');
+  if (!t || !String(title || '').trim() || !needsName(t)) return false;
+  Object.assign(t, cleanTitle(String(title).slice(0, 300), String(author || '').slice(0, 200)), { named: true });
+  return true;
 }
 
 function find(lib, q) {
@@ -159,10 +178,10 @@ function played(lib, tid) { const t = track(lib, tid); if (t) { t.plays = (t.pla
 /** The library as the window sees it: no file paths, just what it needs. */
 function view(lib) {
   return {
-    tracks: lib.tracks.map((t) => ({ id: t.id, kind: t.kind, title: t.title, artist: t.artist, album: t.album, track: t.track, art: t.art || '', yt: t.yt || '', added: t.added, plays: t.plays || 0, last: t.last || 0, liked: !!t.liked, dur: t.dur || 0, missing: t.kind === 'file' && !fs.existsSync(t.path) })),
+    tracks: lib.tracks.map((t) => ({ id: t.id, kind: t.kind, title: t.title, artist: t.artist, album: t.album, track: t.track, art: t.art || '', yt: t.yt || '', added: t.added, plays: t.plays || 0, last: t.last || 0, liked: !!t.liked, dur: t.dur || 0, unnamed: needsName(t), missing: t.kind === 'file' && !fs.existsSync(t.path) })),
     playlists: lib.playlists,
     settings: lib.settings,
   };
 }
 
-module.exports = { home, musicDir, artDir, load, save, fromFile, scan, usualPlaces, addPaths, youtubeId, addYoutube, find, track, remove, playlist, newPlaylist, played, view, DEFAULTS };
+module.exports = { home, musicDir, artDir, load, save, fromFile, scan, usualPlaces, addPaths, youtubeId, addYoutube, cleanTitle, nameYoutube, find, track, remove, playlist, newPlaylist, played, view, DEFAULTS };

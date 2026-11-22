@@ -268,6 +268,12 @@ async function doctor() {
     if (p.running) yes('The side panel is running: the bee in the menu bar opens it.'); else no('The side panel isn\'t running.', `${p.err ? 'It said: ' + p.err + '. ' : ''}hum on starts it. Until then hum opens a window at the side.`);
     if (p.running && p.hotkey === 'carbon') yes('⌃⌥M opens the panel.'); else if (p.running) no(`⌃⌥M isn't hum's${p.hotkeyWhy ? ` (${p.hotkeyWhy})` : ''}.`, 'The menu bar bee always works.');
   }
+  // can hum reach YouTube from here? (a school network may block it, or need a proxy)
+  try {
+    const y = await fetch('https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DjNQXAC9IVRw', { signal: AbortSignal.timeout(8000) });
+    if (y.ok && /json/.test(y.headers.get('content-type') || '')) yes('YouTube answers, so YouTube songs get their names straight away.');
+    else no(`YouTube answered ${y.status} here (a network filter?).`, 'YouTube songs still get added; they get their names when they first play. If they won\'t play either, this network blocks YouTube.');
+  } catch (e) { no("hum's background part can't reach YouTube from this network.", 'YouTube songs still get added, and get their names when they first play (the player uses your Mac\'s own network settings). If they won\'t play, this network blocks YouTube.'); }
   if (r) { const n = await require('./local').ask(r.port, r.secret, 'now', {}, 'x-hum').catch(() => null); out(`  ${n && n.players ? ok('✓') : dim('·')} ${n && n.players ? 'The player is open.' : 'The player isn\'t open right now (hum opens it).'}`); }
   for (const [name, f] of [['background part', 'hum.log'], ['side panel', 'panel.log']]) {
     let text = '';
